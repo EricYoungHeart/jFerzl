@@ -22,6 +22,7 @@ Thumbs.db
 *.tmp
 
 # Ignore generated files/folders
+Docs/*
 Base.*/
 Common/F003.xml
 patients.csv
