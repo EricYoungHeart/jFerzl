@@ -1,0 +1,83 @@
+package ru.petsinbloom.jFerzl;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.function.Consumer;
+
+public class HistoryRequestWithRetries {
+
+    public static WorkFlowResult run(
+            List<Patient> patients, Consumer<String> output, Path userFolder, String endingMessageId, Map<String, MedCompany> sprlpu) {
+
+        int MAX_ATTEMPTS = 10;
+        int attempt = 0;
+        long missing = Integer.MAX_VALUE;
+        while (attempt < MAX_ATTEMPTS && missing > 0) {
+            attempt++;
+            output.accept("Попытка №" + attempt);
+
+            String PI_HISTORY_ID = String.format("%06d", new Random().nextInt(1_000_000));
+            String FERZ_PI_HISTORY_DATA = "pi_history_request_" + PI_HISTORY_ID;
+            String FERZ_PI_HISTORY_PASSPORT = "b" + PI_HISTORY_ID;
+            String FERZ_PI_HISTORY_DFile = "d" + PI_HISTORY_ID;
+            String expectedMessageId = PI_HISTORY_ID + ".USR010@RUBY.MSK.OMS";
+
+            // Generating the second request FERZ_PI_HISTORY
+            if(failed(FerzlWorkflowHelper.createDataHistoryRequest(FERZ_PI_HISTORY_DATA, patients)))
+                return WorkFlowResult.FAILURE;
+
+            if(failed(FerzlWorkflowHelper.createPassportHistoryRequest(FERZ_PI_HISTORY_PASSPORT, PI_HISTORY_ID, FERZ_PI_HISTORY_DATA)))
+                return WorkFlowResult.FAILURE;
+
+            if(failed(FerzlWorkflowHelper.copyHistoryRequestToOutputFolder(userFolder.resolve("OUTPUT"),FERZ_PI_HISTORY_DATA,FERZ_PI_HISTORY_DFile,FERZ_PI_HISTORY_PASSPORT)))
+                return WorkFlowResult.FAILURE;
+
+            /// Отправка
+            if(failed(FerzlWorkflowHelper.waitFilesToBePickedUp(userFolder.resolve("OUTPUT"), FERZ_PI_HISTORY_PASSPORT)))
+                return WorkFlowResult.FAILURE;
+
+            /// Поиск b-файла с заданным Resent-Message-Id и Subject вида FERZ_PI_SEARCH ACCEPTED ID:157702
+            /// Если такой файл найден, значит запрос поставлен в очередь
+            if(failed(FerzlWorkflowHelper.waitForHistoryRequestAcceptance(PI_HISTORY_ID, userFolder.resolve("INPUT"))))
+                return WorkFlowResult.FAILURE;
+
+            /// Ищем сообщение с результатом обработки запроса
+            if(failed(FerzlWorkflowHelper.waitForHistoryRequestReady(userFolder.resolve("INPUT"), PI_HISTORY_ID + ".USR010@RUBY.MSK.OMS")))
+                return WorkFlowResult.FAILURE;
+
+            if(failed(FerzlWorkflowHelper.copyHistoryResponseFromInputToLocale(userFolder.resolve("INPUT"))))
+                return WorkFlowResult.FAILURE;
+
+            /// Распаковываем ответ
+            if(failed(FerzlWorkflowHelper.unzipHistoryResponse( )))
+                return WorkFlowResult.FAILURE;
+
+            ///
+            if(failed(FerzlWorkflowHelper.applyHistoryResonseData(patients)))
+                return WorkFlowResult.FAILURE;
+
+            /// Добавляем прикрепление
+            if(failed(FerzlWorkflowHelper.applyKrepData(patients, sprlpu)))
+                return WorkFlowResult.FAILURE;
+
+            long previousAttempt = missing;
+            missing = patients.stream().filter(p -> p.getInsurCode() == null || p.getInsurCode().isEmpty()).count();
+            output.accept("Пустых записей в ответе: " + missing);
+
+            /// Если два раза подряд одинаковый результат, дальше запросы не отправляем...
+            if(previousAttempt == missing){
+                break;
+            }
+
+        }
+        return WorkFlowResult.SUCCESS;
+    }
+
+    private static boolean failed(WorkFlowResult result) {
+        return result != WorkFlowResult.SUCCESS;
+    }
+
+
+}

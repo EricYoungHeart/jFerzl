@@ -1,0 +1,214 @@
+package ru.petsinbloom.jFerzl;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+
+public class FerzlStateMachine {
+
+    private Path aisomsFolder = Path.of(Main.config.getConfig("aisomsFolder"), "USR010");
+    private Path inputFolder = aisomsFolder.resolve("input");// Path.of(Main.config.getConfig("inputFolder")); //
+    private Path outputFolder = aisomsFolder.resolve("output"); // Path.of(Main.config.getConfig("outputFolder")); //
+
+    private static Path workingFolder;
+    private static Path commonFolder;
+
+    private Path stateFile = Path.of("state.log");
+
+    private Path requestBook;
+
+    private Consumer<String> output;
+
+    private static final String REQUEST_WORKBOOK_FILENAME = "request.xlsx";
+    private static final String PATIENTS_CSV = "patients.csv";
+
+    String FERZ_PI_SEARCH_DATA = "pi_search_request.csv";
+    String PI_SEARCH_ID;
+    String FERZ_PI_SEARCH_PASSPORT;
+    String FERZ_PI_SEARCH_DFile;
+    String FERZ_PI_SEARCH_RESPONSE = "pi_search_response.csv";
+
+    private static final String FERZ_PI_HISTORY_DATA = "pi_history_request.csv";
+    private static String PI_HISTORY_ID = "101102";
+    private static String FERZ_PI_HISTORY_PASSPORT = "b" + PI_HISTORY_ID;
+    private static String FERZ_PI_HISTORY_DFile = "d" + PI_HISTORY_ID;
+    private static final String FERZ_PI_HISTORY_RESPONSE = "pi_history_response.zip";
+
+    private static Path F003;
+    private static Path SPRLPU_CSV;
+
+    private List<Patient> patients=new ArrayList<>();
+
+    private Map<String, MedCompany> sprlpu = new HashMap<>();
+
+    public FerzlStateMachine(Consumer<String> output) {
+        workingFolder = Path.of(Main.config.getConfig("workingFolder"));
+        commonFolder = Path.of(Main.config.getConfig("commonFolder"));
+        F003 = commonFolder.resolve("F003.xml");
+        SPRLPU_CSV = commonFolder.resolve("sprlpu.csv");
+
+        this.output = output;
+        FerzlWorkflowHelper.setOutput(output);
+        FerzlWorkflowHelper.setWorkingFolder(workingFolder);
+    }
+
+    public void runFrom(WorkflowState startState) {
+        WorkflowState state = startState;
+
+        while (state != WorkflowState.DONE && state != WorkflowState.FAILURE) {
+            output.accept("Шаг: " + state);
+            saveProgress(state); // (Optional) persist state
+            state = runStep(state);
+        }
+
+        if (state == WorkflowState.DONE) {
+            output.accept("Процесс завершён успешно.");
+            clearProgress();
+        } else {
+            output.accept("Процесс прерван на шаге: " + state);
+        }
+    }
+
+    /// Сохраняем состояние
+    private void saveProgress(WorkflowState state) {
+        try {
+            Files.writeString(stateFile, state.name());
+        } catch (IOException e) {
+            output.accept("Не удалось сохранить состояние: " + e.getMessage());
+        }
+    }
+
+    // Загружаем сохраненное состояние
+    public WorkflowState loadLastState() {
+        try {
+            return Files.exists(stateFile)
+                    ? WorkflowState.valueOf(Files.readString(stateFile).trim())
+                    : WorkflowState.PREPARE_WORKING_FOLDER;
+        } catch (Exception e) {
+            return WorkflowState.PREPARE_WORKING_FOLDER;
+        }
+    }
+
+    // Удаляем лог-файл состояния
+    private void clearProgress() {
+        try {
+            Files.deleteIfExists(stateFile);
+        } catch (IOException ignored) {}
+    }
+
+    WorkflowState runStep(WorkflowState state) {
+        String zipSearchResponse = "searchResponse_" + PI_SEARCH_ID + ".zip";
+        switch (state) {
+            case PREPARE_WORKING_FOLDER:
+                return FerzlWorkflowHelper.prepareWorkingFolder() == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CHECK_AISOMS_FOLDER : WorkflowState.FAILURE;
+
+            case CHECK_AISOMS_FOLDER:
+                return FerzlWorkflowHelper.checkForAisomsFolderExistance(aisomsFolder, inputFolder, outputFolder) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CHECK_REQUEST_WORKBOOK : WorkflowState.FAILURE;
+
+            case CHECK_REQUEST_WORKBOOK:
+                requestBook = workingFolder.resolve(REQUEST_WORKBOOK_FILENAME);
+                return FerzlWorkflowHelper.checkRequestWorkbookPresence(requestBook) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.READ_SPRLPU : WorkflowState.FAILURE;
+
+            case READ_SPRLPU:
+                return FerzlWorkflowHelper.readSprlpuIfPresent(SPRLPU_CSV, sprlpu, F003) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.READ_PATIENTS : WorkflowState.FAILURE;
+
+            case READ_PATIENTS:
+                return FerzlWorkflowHelper.readPatientsIfPresent(workingFolder.resolve(PATIENTS_CSV), patients, requestBook) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CREATE_DATA_SEARCH_REQUEST : WorkflowState.FAILURE;
+
+            case CREATE_DATA_SEARCH_REQUEST:
+                return FerzlWorkflowHelper.createDataSearchRequest(patients, FERZ_PI_SEARCH_DATA) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CREATE_PASSPORT_SEARCH_REQUEST : WorkflowState.FAILURE;
+
+            case CREATE_PASSPORT_SEARCH_REQUEST:
+                String expectedMessageId="";
+                return FerzlWorkflowHelper.createPassportSearchRequest(FERZ_PI_SEARCH_PASSPORT, FERZ_PI_SEARCH_DATA, PI_SEARCH_ID, expectedMessageId) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.COPY_SEARCH_REQUEST_FILES : WorkflowState.FAILURE;
+
+            case COPY_SEARCH_REQUEST_FILES:
+                return FerzlWorkflowHelper.copySearchRequestToOutputFolder(outputFolder, FERZ_PI_SEARCH_DATA, FERZ_PI_SEARCH_DFile, FERZ_PI_SEARCH_PASSPORT) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_SEARCH_REQUEST_TO_SEND : WorkflowState.FAILURE;
+
+            case WAIT_SEARCH_REQUEST_TO_SEND:
+                return FerzlWorkflowHelper.waitForRequestToBePickedUp(outputFolder, FERZ_PI_SEARCH_PASSPORT) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_FOR_SEARCH_REQUEST_ACCEPT : WorkflowState.FAILURE;
+
+            case WAIT_FOR_SEARCH_REQUEST_ACCEPT:
+                return FerzlWorkflowHelper.waitForSearchRequestAcceptance(PI_SEARCH_ID + ".USR010@RUBY.MSK.OMS", inputFolder) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_FOR_SEARCH_REQUEST_READY : WorkflowState.FAILURE;
+
+            case WAIT_FOR_SEARCH_REQUEST_READY:
+                return FerzlWorkflowHelper.waitForSearchRequestReady(inputFolder, PI_SEARCH_ID + ".USR010@RUBY.MSK.OMS", zipSearchResponse) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.COPY_SEARCH_RESPONSE_FROM_INPUT_TO_LOCAL : WorkflowState.FAILURE;
+
+            case COPY_SEARCH_RESPONSE_FROM_INPUT_TO_LOCAL:
+                return FerzlWorkflowHelper.copySearchResponseFromInputToLocale(zipSearchResponse, inputFolder) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.UNZIP_SEARCH_RESPONSE : WorkflowState.FAILURE;
+
+            case UNZIP_SEARCH_RESPONSE:
+                return FerzlWorkflowHelper.unzipSearchResponse(zipSearchResponse) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.APPLY_SEARCH_RESPONSE_DATA : WorkflowState.FAILURE;
+
+            case APPLY_SEARCH_RESPONSE_DATA:
+                return FerzlWorkflowHelper.applySearchResponseData(FERZ_PI_SEARCH_RESPONSE, patients) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CREATE_DATA_HISTORY_REQUEST : WorkflowState.FAILURE;
+
+            case CREATE_DATA_HISTORY_REQUEST:
+                return FerzlWorkflowHelper.createDataHistoryRequest(FERZ_PI_HISTORY_DATA, patients) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.CREATE_PASSPORT_HISTORY_REQUEST : WorkflowState.FAILURE;
+
+            case CREATE_PASSPORT_HISTORY_REQUEST:
+                return FerzlWorkflowHelper.createPassportHistoryRequest(FERZ_PI_HISTORY_PASSPORT, PI_HISTORY_ID, FERZ_PI_HISTORY_DATA) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.COPY_HISTORY_REQUEST_FILES : WorkflowState.FAILURE;
+
+            case COPY_HISTORY_REQUEST_FILES:
+                return FerzlWorkflowHelper.copyHistoryRequestToOutputFolder(outputFolder,FERZ_PI_HISTORY_DATA,FERZ_PI_HISTORY_DFile,FERZ_PI_HISTORY_PASSPORT) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_HISTORY_REQUEST_TO_SEND : WorkflowState.FAILURE;
+
+            case WAIT_HISTORY_REQUEST_TO_SEND:
+                return FerzlWorkflowHelper.waitFilesToBePickedUp(outputFolder, FERZ_PI_HISTORY_PASSPORT) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_FOR_HISTORY_REQUEST_ACCEPT : WorkflowState.FAILURE;
+
+            case WAIT_FOR_HISTORY_REQUEST_ACCEPT:
+                return FerzlWorkflowHelper.waitForHistoryRequestAcceptance(PI_HISTORY_ID, inputFolder) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.WAIT_FOR_HISTORY_REQUEST_READY : WorkflowState.FAILURE;
+
+            case WAIT_FOR_HISTORY_REQUEST_READY:
+                return FerzlWorkflowHelper.waitForHistoryRequestReady(inputFolder, PI_HISTORY_ID + ".USR010@RUBY.MSK.OMS") == WorkFlowResult.SUCCESS
+                        ? WorkflowState.COPY_HISTORY_RESPONSE_FROM_INPUT_TO_LOCAL : WorkflowState.FAILURE;
+
+            case COPY_HISTORY_RESPONSE_FROM_INPUT_TO_LOCAL:
+                return FerzlWorkflowHelper.copyHistoryResponseFromInputToLocale(inputFolder) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.UNZIP_HISTORY_RESPONSE : WorkflowState.FAILURE;
+
+            case UNZIP_HISTORY_RESPONSE:
+                return FerzlWorkflowHelper.unzipHistoryResponse() == WorkFlowResult.SUCCESS
+                        ? WorkflowState.APPLY_HISTORY_RESPONSE_DATA : WorkflowState.FAILURE;
+
+            case APPLY_HISTORY_RESPONSE_DATA:
+                return FerzlWorkflowHelper.applyHistoryResonseData(patients) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.APPLY_KREP_DATA : WorkflowState.FAILURE;
+
+            case APPLY_KREP_DATA:
+                return FerzlWorkflowHelper.applyKrepData(patients, sprlpu) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.EXPORT_TO_EXCEL : WorkflowState.FAILURE;
+
+            case EXPORT_TO_EXCEL:
+                return FerzlWorkflowHelper.writeToExcel(patients) == WorkFlowResult.SUCCESS
+                        ? WorkflowState.DONE : WorkflowState.FAILURE;
+
+            default:
+                return WorkflowState.FAILURE;
+        }
+    }
+
+}

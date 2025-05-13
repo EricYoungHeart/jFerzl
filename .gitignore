@@ -1,0 +1,40 @@
+# Ignore IntelliJ project files
+.idea/
+*.iml
+
+# Ignore build output
+/out/
+/target/
+
+# Ignore compiled classes
+*.class
+
+# Ignore log files
+*.log
+
+# Ignore OS junk
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+*.swp
+*.bak
+*.tmp
+
+# Ignore generated files/folders
+Base.*/
+Common/F003.xml
+patients.csv
+*.xlsx
+*.zip
+*.csv
+
+# Maven
+/logs/
+dependency-reduced-pom.xml
+
+# Optional: ignore JetBrains run configs if not shared
+*.iws
+
+# Optional: if using GitHub Copilot/JetBrains plugins
+.idea/.gitignore
