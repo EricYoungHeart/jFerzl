@@ -90,7 +90,7 @@ class FerzlWorkflow {
 
             String user = String.format("USR%03d", shortIndex);
             Path userFolder = aisomsFolder.resolve(user);
-            String endingMessageId = String.format(".%s@ERIC.YOUNG.RU", user);
+            // String endingMessageId = String.format(".%s@ERIC.YOUNG.RU", user);
 
             List<Patient> patients = batches.get(batchNum);
             output.accept("Обработка пакета #" + (batchNum + 1) + " из " + batches.size());
@@ -98,15 +98,25 @@ class FerzlWorkflow {
             /// Запрос типа search
             futures.add(executor.submit(() -> {
                 SearchRequestWithRetries searchRequestWithRetries = new SearchRequestWithRetries();
-                return searchRequestWithRetries.run(patients, output, userFolder, endingMessageId, helper);
+                HistoryRequestWithRetries historyRequestWithRetries = new HistoryRequestWithRetries();
+
+                WorkFlowResult searchResult = searchRequestWithRetries.run(patients, output, userFolder,
+                        String.format(".%s@ERZL.SEARCH.MSK.OMS", user), helper);
+                WorkFlowResult historyResult = historyRequestWithRetries.run(patients, output, userFolder,
+                        String.format(".%s@ERZL.HISTORY.MSK.OMS", user), sprlpu, helper);
+
+                return (searchResult == WorkFlowResult.SUCCESS && historyResult == WorkFlowResult.SUCCESS)
+                        ? WorkFlowResult.SUCCESS
+                        : WorkFlowResult.FAILURE;
                 }));
 
             /// Запрос типа history
             // HistoryRequestWithRetries.run(patients, output, userFolder, endingMessageId, sprlpu);
         }
         executor.shutdown();
+
         try {
-            executor.awaitTermination(10, TimeUnit.MINUTES);
+            executor.awaitTermination(30, TimeUnit.MINUTES);
         } catch (InterruptedException e) {
             output.accept("Поток был прерван во время ожидания завершения: " + e.getMessage());
         }

@@ -23,11 +23,11 @@ public class PassportWriter {
     }
 
     // ferz_pi_history
-    public static void historyPassportWrite(Path outputPath, String code, String attachmentFileName) throws IOException {
+    public static void historyPassportWrite(Path outputPath, String code, String attachmentFileName, String messageId) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath.toFile()))) {
             writer.write("To: erz@mgf.msk.oms");
             writer.newLine();
-            writer.write("Message-Id: " + code + messageFinalPart);
+            writer.write("Message-Id: " + messageId);
             writer.newLine();
             writer.write("Subject: FERZ_PI_HISTORY");
             writer.newLine();

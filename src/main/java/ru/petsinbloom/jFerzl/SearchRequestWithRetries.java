@@ -2,14 +2,13 @@ package ru.petsinbloom.jFerzl;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
 
 /// Метод run класса будет вызываться в concurrent среде
 class SearchRequestWithRetries {
 
-    static WorkFlowResult run(
+    WorkFlowResult run(
             List<Patient> patients, Consumer<String> output, Path userFolder, String endingMessageId, FerzlWorkflowHelper helper) {
 
         int MAX_ATTEMPTS = 5;

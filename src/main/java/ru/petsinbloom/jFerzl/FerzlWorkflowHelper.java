@@ -386,7 +386,6 @@ class FerzlWorkflowHelper {
 
 
     WorkFlowResult createDataHistoryRequest(String FERZ_PI_HISTORY_DATA, List<Patient> patients) {
-        // if(!Files.exists(workingFolder.resolve(FERZ_PI_HISTORY_DATA))){
         try {
             FinalCsvWriter.writeFinalFormat(workingFolder.resolve(FERZ_PI_HISTORY_DATA), patients);
             output.accept(FERZ_PI_HISTORY_DATA + " created successfully.");
@@ -394,24 +393,16 @@ class FerzlWorkflowHelper {
             output.accept(e.getMessage());
             return WorkFlowResult.FAILURE;
         }
-        //}
-        //else{
-        //    output.accept(FERZ_PI_HISTORY_DATA + " previously existed.");
-        //}
         return WorkFlowResult.SUCCESS;
     }
 
-    WorkFlowResult createPassportHistoryRequest(String FERZ_PI_HISTORY_PASSPORT, String PI_HISTORY_ID, String FERZ_PI_HISTORY_DATA) {
-        //if(!Files.exists(workingFolder.resolve(FERZ_PI_HISTORY_PASSPORT))){
+    WorkFlowResult createPassportHistoryRequest(String FERZ_PI_HISTORY_PASSPORT, String PI_HISTORY_ID, String FERZ_PI_HISTORY_DATA, String expectedMessageId) {
         try {
-            PassportWriter.historyPassportWrite(workingFolder.resolve(FERZ_PI_HISTORY_PASSPORT), PI_HISTORY_ID, FERZ_PI_HISTORY_DATA);
+            PassportWriter.historyPassportWrite(workingFolder.resolve(FERZ_PI_HISTORY_PASSPORT), PI_HISTORY_ID, FERZ_PI_HISTORY_DATA, expectedMessageId);
             output.accept("File " +  FERZ_PI_HISTORY_PASSPORT + " created successfully.");
         } catch (Exception e) {
             output.accept("Не удалось сформировать " + FERZ_PI_HISTORY_PASSPORT+" !");
         }
-        //}else{
-        //    output.accept("Файл-паспорт запроса ferz_pi_history " + FERZ_PI_HISTORY_PASSPORT + " уже существует.");
-        //}
         return WorkFlowResult.SUCCESS;
     }
 
@@ -435,7 +426,7 @@ class FerzlWorkflowHelper {
 
    WorkFlowResult waitFilesToBePickedUp(Path outputFolder,  String FERZ_PI_HISTORY_PASSPORT){
        List<String> filesToWatch = List.of(FERZ_PI_HISTORY_PASSPORT);
-       Duration timeout = Duration.ofMinutes(2); // wait up to 1 minutes
+       Duration timeout = Duration.ofMinutes(waitForFilesToBePickedUp); // wait up to 1 minutes
        try {
            boolean success = waitForFilesToDisappear.Check(outputFolder, filesToWatch, output, timeout);
            if (!success) {
@@ -449,8 +440,7 @@ class FerzlWorkflowHelper {
    }
 
    // Если не пришло сообщение о постановке в очередь, попробуем продолжить работу...
-   WorkFlowResult waitForHistoryRequestAcceptance(String PI_HISTORY_ID, Path inputFolder){
-       String expectedMessageId = PI_HISTORY_ID + ".USR010@RUBY.MSK.OMS";
+   WorkFlowResult waitForHistoryRequestAcceptance(String expectedMessageId, Path inputFolder){
        Boolean isRequestInQueue = false;
        try {
            isRequestInQueue = IncomingMessageChecker.checkIncomingMessages(output, inputFolder, expectedMessageId,
@@ -466,55 +456,46 @@ class FerzlWorkflowHelper {
        return WorkFlowResult.SUCCESS;
    }
 
-   WorkFlowResult waitForHistoryRequestReady(Path inputFolder, String expectedMessageId){
+   WorkFlowResult waitForHistoryRequestReady(Path inputFolder, String expectedMessageId, String zipHistoryResponse){
        boolean isResponseready = false;
-//       if(!Files.exists(inputFolder.resolve("pi_history_response.zip"))){
-           try {
-               isResponseready = IncomingAttachmentHandler.handleAttachmentFile(output, inputFolder, expectedMessageId, "pi_history_response.zip", Duration.ofMinutes(15));
-               if(!isResponseready)
-                   return WorkFlowResult.FAILURE;
-           } catch (Exception e) {
-               output.accept(e.getMessage());
+       try {
+           isResponseready = IncomingAttachmentHandler.handleAttachmentFile(output, inputFolder, expectedMessageId, zipHistoryResponse,
+                   Duration.ofMinutes(waitForRequestReady));
+           if(!isResponseready)
                return WorkFlowResult.FAILURE;
-           }
-//              }
+       } catch (Exception e) {
+           output.accept(e.getMessage());
+           return WorkFlowResult.FAILURE;
+       }
        return WorkFlowResult.SUCCESS;
    }
 
-   WorkFlowResult copyHistoryResponseFromInputToLocale(Path inputFolder) {
-//                if(!Files.exists(workingFolder.resolve("pi_history_response.zip"))){
-            if(Files.exists(inputFolder.resolve("pi_history_response.zip"))){
-                try {
-                    Files.copy(inputFolder.resolve("pi_history_response.zip"), workingFolder.resolve("pi_history_response.zip"), StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException ex) {
-                    output.accept(ex.getMessage());
-                    return WorkFlowResult.FAILURE;
-                }
+   WorkFlowResult copyHistoryResponseFromInputToLocale(String zipHistoryResponse, Path inputFolder) {
+        if(Files.exists(inputFolder.resolve(zipHistoryResponse))){
+            try {
+                Files.copy(inputFolder.resolve(zipHistoryResponse), workingFolder.resolve(zipHistoryResponse));
+            } catch (IOException ex) {
+                output.accept(ex.getMessage());
+                return WorkFlowResult.FAILURE;
             }
-//        }else{
-//            output.accept("Файл pi_history_response.zip скопирован ранее.");
-//        }
+        }
         return WorkFlowResult.SUCCESS;
     }
 
-    WorkFlowResult unzipHistoryResponse() {
-//                if(!Files.exists(workingFolder.resolve("pi_history_response.csv"))){
+    WorkFlowResult unzipHistoryResponse(String zipHistoryResponse, String historyId) {
             try {
-                MultiCsvExtractor.extractNamedCsvParts(output, workingFolder.resolve("pi_history_response.zip"), workingFolder);
+                MultiCsvExtractor.extractNamedCsvParts(output, workingFolder.resolve(zipHistoryResponse), workingFolder, historyId);
             } catch (Exception e) {
                 output.accept(e.getMessage());
                 return WorkFlowResult.FAILURE;
             }
-//        }else{
-//            output.accept("pi_history_response.csv разархивирован ранее.");
-//        }
         return WorkFlowResult.SUCCESS;
     }
 
-    WorkFlowResult applyHistoryResonseData(List<Patient> patients) {
+    WorkFlowResult applyHistoryResonseData(List<Patient> patients, String insuFile) {
         try{
-            InsuCsvProcessor.applyInsuranceData(workingFolder.resolve("insu.csv"), patients);
-            output.accept("Обрабатываем файл insu.csv.");
+            InsuCsvProcessor.applyInsuranceData(workingFolder.resolve(insuFile), patients);
+            output.accept("Обрабатываем файл " + insuFile);
         }catch (Exception e){
             output.accept(e.getMessage());
             return WorkFlowResult.FAILURE;
@@ -522,10 +503,10 @@ class FerzlWorkflowHelper {
         return WorkFlowResult.SUCCESS;
     }
 
-    WorkFlowResult applyKrepData(List<Patient> patients, Map<String, MedCompany> sprlpu) {
+    WorkFlowResult applyKrepData(List<Patient> patients, Map<String, MedCompany> sprlpu, String krepFile) {
         try{
-            KrepCsvProcessor.applyKrepData(workingFolder.resolve("krep.csv"), patients, sprlpu);
-            output.accept("Обрабатываем файл krep.csv.");
+            KrepCsvProcessor.applyKrepData(workingFolder.resolve(krepFile), patients, sprlpu);
+            output.accept("Обрабатываем файл " + krepFile);
         } catch (IOException e) {
             output.accept(e.getMessage());
             return WorkFlowResult.FAILURE;
