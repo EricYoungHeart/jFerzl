@@ -93,7 +93,7 @@ class FerzlWorkflow {
             // String endingMessageId = String.format(".%s@ERIC.YOUNG.RU", user);
 
             List<Patient> patients = batches.get(batchNum);
-            output.accept("Обработка пакета #" + (batchNum + 1) + " из " + batches.size());
+            // output.accept("Обработка пакета #" + (batchNum + 1) + " из " + batches.size());
 
             /// Запрос типа search
             futures.add(executor.submit(() -> {
@@ -116,7 +116,7 @@ class FerzlWorkflow {
         executor.shutdown();
 
         try {
-            executor.awaitTermination(30, TimeUnit.MINUTES);
+            executor.awaitTermination(60, TimeUnit.MINUTES);
         } catch (InterruptedException e) {
             output.accept("Поток был прерван во время ожидания завершения: " + e.getMessage());
         }

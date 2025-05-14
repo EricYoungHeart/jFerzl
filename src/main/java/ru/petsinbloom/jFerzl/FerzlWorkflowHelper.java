@@ -216,7 +216,7 @@ class FerzlWorkflowHelper {
     WorkFlowResult createDataSearchRequest(List<Patient> patients, String FERZ_PI_SEARCH_DATA) {
         try {
             SearchRequestDataCreator.Create(patients, workingFolder.resolve(FERZ_PI_SEARCH_DATA));
-            output.accept(FERZ_PI_SEARCH_DATA + " created successfully.");
+            // output.accept(FERZ_PI_SEARCH_DATA + " created successfully.");
             return WorkFlowResult.SUCCESS;
         } catch (Exception e) {
             output.accept("Не удалось создать " + FERZ_PI_SEARCH_DATA+" !");
@@ -227,7 +227,7 @@ class FerzlWorkflowHelper {
     WorkFlowResult createPassportSearchRequest(String FERZ_PI_SEARCH_PASSPORT, String PI_SEARCH_ID, String FERZ_PI_SEARCH_DATA, String messageId) {
         try {
             PassportWriter.searchPassportWrite(workingFolder.resolve(FERZ_PI_SEARCH_PASSPORT), PI_SEARCH_ID, FERZ_PI_SEARCH_DATA, messageId);
-            output.accept("File" +  FERZ_PI_SEARCH_PASSPORT + " created successfully.");
+            // output.accept("File" +  FERZ_PI_SEARCH_PASSPORT + " created successfully.");
             return WorkFlowResult.SUCCESS;
         } catch (Exception e) {
             output.accept("Не удалось сформировать " + FERZ_PI_SEARCH_PASSPORT+" !");
@@ -293,15 +293,15 @@ class FerzlWorkflowHelper {
                 if (success) {
                     return WorkFlowResult.SUCCESS;
                 } else {
-                    output.accept("Попытка " + attempt + ": файл(ы) не были удалены в течение таймаута.");
+                    output.accept("Попытка " + attempt + ": файл(ы) не были оптравлены в течение таймаута.");
                 }
             } catch (IOException e) {
-                output.accept("Попытка " + attempt + ": ошибка при ожидании удаления файла: " + e.getMessage());
+                output.accept("Попытка " + attempt + ": ошибка при ожидании оптравки файла: " + e.getMessage());
             }
         }
 
         // After 3 failed attempts
-        output.accept("Удаление файлов не подтверждено после " + maxRetries + " попыток.");
+        output.accept("Отправка файлов не подтверждена после " + maxRetries + " попыток.");
         return WorkFlowResult.FAILURE;
     }
 
@@ -388,7 +388,7 @@ class FerzlWorkflowHelper {
     WorkFlowResult createDataHistoryRequest(String FERZ_PI_HISTORY_DATA, List<Patient> patients) {
         try {
             FinalCsvWriter.writeFinalFormat(workingFolder.resolve(FERZ_PI_HISTORY_DATA), patients);
-            output.accept(FERZ_PI_HISTORY_DATA + " created successfully.");
+            // output.accept(FERZ_PI_HISTORY_DATA + " created successfully.");
         } catch (Exception e) {
             output.accept(e.getMessage());
             return WorkFlowResult.FAILURE;
@@ -399,7 +399,7 @@ class FerzlWorkflowHelper {
     WorkFlowResult createPassportHistoryRequest(String FERZ_PI_HISTORY_PASSPORT, String PI_HISTORY_ID, String FERZ_PI_HISTORY_DATA, String expectedMessageId) {
         try {
             PassportWriter.historyPassportWrite(workingFolder.resolve(FERZ_PI_HISTORY_PASSPORT), PI_HISTORY_ID, FERZ_PI_HISTORY_DATA, expectedMessageId);
-            output.accept("File " +  FERZ_PI_HISTORY_PASSPORT + " created successfully.");
+            // output.accept("File " +  FERZ_PI_HISTORY_PASSPORT + " created successfully.");
         } catch (Exception e) {
             output.accept("Не удалось сформировать " + FERZ_PI_HISTORY_PASSPORT+" !");
         }
@@ -460,7 +460,7 @@ class FerzlWorkflowHelper {
        boolean isResponseready = false;
        try {
            isResponseready = IncomingAttachmentHandler.handleAttachmentFile(output, inputFolder, expectedMessageId, zipHistoryResponse,
-                   Duration.ofMinutes(waitForRequestReady));
+                   Duration.ofMinutes(waitForRequestReady*2));
            if(!isResponseready)
                return WorkFlowResult.FAILURE;
        } catch (Exception e) {

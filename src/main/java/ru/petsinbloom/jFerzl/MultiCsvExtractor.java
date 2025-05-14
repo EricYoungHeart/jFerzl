@@ -40,8 +40,6 @@ public class MultiCsvExtractor {
                     }
                 }
             }
-
-            output.accept("Total CSV files extracted: " + csvCount);
         }
     }
 }

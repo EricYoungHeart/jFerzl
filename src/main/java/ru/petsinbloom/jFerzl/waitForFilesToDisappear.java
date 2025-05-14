@@ -29,7 +29,7 @@ public class waitForFilesToDisappear {
             return true;
         }
 
-        output.accept("Ожидаем удаление файлов: " + waitingFor);
+        // output.accept("Ожидаем отправки файлов: " + waitingFor);
 
         // Step 2: Register watcher AFTER checking current state
         WatchService watchService = FileSystems.getDefault().newWatchService();
@@ -74,7 +74,7 @@ public class waitForFilesToDisappear {
         watchService.close();
 
         if (waitingFor.isEmpty()) {
-            output.accept("Все указанные файлы отправлены.");
+            // output.accept("Все указанные файлы отправлены.");
             return true;
         } else {
             output.accept("Истекло время ожидания. Файлы остались: " + waitingFor);

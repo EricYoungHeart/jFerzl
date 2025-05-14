@@ -17,7 +17,7 @@ class SearchRequestWithRetries {
 
         while (attempt < MAX_ATTEMPTS && missing > 0) {
             attempt++;
-            output.accept("FERZ_PI_SEARCH: попытка №" + attempt);
+            // output.accept("FERZ_PI_SEARCH: попытка №" + attempt);
 
             String PI_SEARCH_ID = String.format("%06d", new Random().nextInt(1_000_000));
             String FERZ_PI_SEARCH_DATA = "pi_search_request_" + PI_SEARCH_ID;

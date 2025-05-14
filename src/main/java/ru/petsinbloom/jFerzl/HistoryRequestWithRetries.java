@@ -17,7 +17,7 @@ class HistoryRequestWithRetries {
         long missing = Integer.MAX_VALUE;
         while (attempt < MAX_ATTEMPTS && missing > 0) {
             attempt++;
-            output.accept("Попытка №" + attempt);
+            // output.accept("Попытка №" + attempt);
 
             String PI_HISTORY_ID = String.format("%06d", new Random().nextInt(1_000_000));
             String FERZ_PI_HISTORY_DATA = "pi_history_request_" + PI_HISTORY_ID;
